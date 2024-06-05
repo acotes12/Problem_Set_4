@@ -1,0 +1,155 @@
+---
+title: "Problem set 4 _Alejandro Cotes"
+author: "_Alejandro Cotes"
+date: "2024-06-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Configuración inicial
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("rvest")
+#install.packages("dplyr")
+#install.packages("data.table")
+#install.packages("sf")
+#install.packages("ggplot2")
+#install.packages("viridis")
+#install.packages("ggspatial")
+
+library(rvest)
+library(dplyr)
+library(data.table)
+library(sf)
+library(ggplot2)
+library(viridis)
+library(ggspatial)
+library(knitr)
+```
+
+
+```{r initial_config}
+
+# URL de la página original
+url <- "https://eduard-martinez.github.io/pset-4.html"
+
+# Leer el contenido de la página original
+webpage <- read_html(url)
+
+# Extraer todas las URLs contenidas en los enlaces de la página original
+urls <- webpage %>% 
+  html_nodes("a") %>% 
+  html_attr("href")
+
+# Crear un objeto que almacene el vector de URLs
+url_full <- urls
+
+# Mostrar las URLs completas
+head(url_full)
+
+
+# Filtrar las URLs que contienen la palabra "propiedad"
+url_subset <- url_full[grepl("propiedad", url_full)]
+
+# Mostrar las URLs filtradas
+head(url_subset)
+```
+
+
+```{r}
+# Inicializar una lista vacía para almacenar las tablas
+lista_tablas <- list()
+
+# Iterar sobre cada URL en url_subset
+for (url in url_subset) {
+  # Leer el contenido de la página
+  webpage <- read_html(url)
+  
+  # Extraer la tabla (asumimos que la tabla está presente y es la primera en la página)
+  tabla <- webpage %>% 
+    html_node("table") %>% 
+    html_table()
+  
+  # Añadir la tabla a la lista
+  lista_tablas <- append(lista_tablas, list(tabla))
+}
+
+# Convertir la lista de tablas en un único data frame
+db_house <- rbindlist(lista_tablas, fill = TRUE)
+
+# Mostrar el contenido de db_house
+head(db_house)
+```
+
+
+```{r}
+# Convertir el data frame en un objeto SimpleFeature
+# Asumimos que db_house tiene columnas 'lon' y 'lat'
+sf_house <- st_as_sf(db_house, coords = c("lon", "lat"), crs = 4326)
+
+# Mostrar el contenido de sf_house
+print(sf_house)
+
+# Crear el mapa usando ggplot2 y ggspatial
+mapa <- ggplot(data = sf_house) +
+  annotation_map_tile("osm") +  # Añadir el mapa base de OpenStreetMap
+  geom_sf(aes(color = price), size = 2) +  # Asumimos que la columna de precios se llama 'Precio'
+  scale_color_viridis_c(option = "D") +
+  theme_minimal() +
+  labs(title = "Mapa de propiedades",
+       color = "Precio de la vivienda")
+
+# Mostrar el mapa
+print(mapa)
+
+# Exportar el mapa en formato PDF
+ggsave("mapa_propiedades.pdf", plot = mapa)
+```
+
+
+```{r}
+
+# Crear variables dummy para rooms, bedrooms, bathrooms y property_type
+sf_house$rooms <- factor(sf_house$rooms, levels = 1:12)
+sf_house$bedrooms <- factor(sf_house$bedrooms, levels = 1:12)
+sf_house$bathrooms <- factor(sf_house$bathrooms, levels = 1:10)
+sf_house$property_type <- factor(sf_house$property_type, levels = c("Casa", "Apartamento", "Depósito", "Otro"))
+
+# Ajustar el modelo de regresión lineal
+model <- lm(price ~ rooms + bedrooms + bathrooms + surface_total + surface_covered + property_type, data = sf_house)
+
+# Mostrar los resultados del modelo
+summary(model)
+
+```
+
+------------------------------------------------------------------------
+
+### Conclusiones apartir de un modelo de regresión
+
+El coeficiente de nuestra regresión suguiere que las viviendas de por si sola 
+controlando por los demás variables constantes, nos dice que la vivienda asume 
+poco valor.
+Sientas que el coeficienta de rooms que es el número de cuertos por casa suguiere
+que a más habitaciones más valor tiene la casa cuando tiene 2 o 4, sin embargo,
+cuando la casa tiene 3 , 6 y 12 habitaciones, el precio de la vivienda cae, 
+posiblemente, porque, las viviendas en estratos de bajos recursos suelen tener
+más viviendas que las del promedio como medida de ahorro economico al concentrar
+varios habitantes dentro de la misma vivienda y ahorrar gastos en arriendo.
+Por otro lado, la variable bathroom, sugiere que las casas con menos baños valen
+más que las que más poseen baños, posiblemente bajo las misma hipotesis del
+número de habitaciones.
+Adicionalmente, parece que el tamaño de la casa con las varibles surface_total,
+surface_covered si influyen en aumentar el precio de la vivienda, al igual de la 
+variable categorica property_typeApartamento que ordena desde casa, apartamento,
+deposito y otro, donde es logico suponer que un apartamento es más costoso que 
+una casa y un deposito que un apartamento.
+A pesar de esto, no tenemos evidencia suficiente para tomar estas afirmaciones
+como efectos causales, dado que, la unica variable que es estadisticamente
+significativa al 10% es rooms6, la cual reduce el valor de la vivienda, es decir,
+posiblemente las viviendas más economicas y de bajos recursos tienen 6 
+habitaciones por vivienda. De hecho, resaltamos que seria importante más allá
+de las caracteristicas de la vivienda incluir controles adicionales como 
+estrato socio economonico de la vivienda para poder explicar mejor la variable
+precio de la vivienda.
+
+------------------------------------------------------------------------
