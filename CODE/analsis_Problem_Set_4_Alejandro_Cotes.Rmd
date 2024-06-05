@@ -126,6 +126,7 @@ summary(model)
 
 ### Conclusiones apartir de un modelo de regresión
 
+
 El coeficiente de nuestra regresión suguiere que las viviendas de por si sola 
 controlando por los demás variables constantes, nos dice que la vivienda asume 
 poco valor.
